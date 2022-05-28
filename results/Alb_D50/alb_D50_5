@@ -1,0 +1,2 @@
+Customers_N,Distance,Time,Stops,Stops_h,FixedDC_Cost,Trans_Cost,Variable_DC,Fixed_V,Total_Cost,Var_per_order,Trans_per_order,Transp_order_with_V,FixedDC_per_order,Total_Cost_per_order,Items,Cost_per_item
+50,99879.0,22020.0,52.0,8.5,480.0,124.01,320.18,45.0,969.19,6.4,2.48,3.38,9.6,19.38,2193.0,0.44
