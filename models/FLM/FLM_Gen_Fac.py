@@ -34,10 +34,10 @@ class FLM:
         
         # Create final Customer DF
         self.customers_n = customers_n
-        mylist = [demand_per_customer] * self.customers_n
+        demand_list = [demand_per_customer] * self.customers_n
 
         set_of_all_customers = self.sample_nodes_df.copy()
-        set_of_all_customers['Demand_C'] = mylist
+        set_of_all_customers['Demand_C'] = demand_list
         self.I = set_of_all_customers.index.values
         self.set_of_all_customers = set_of_all_customers
 
@@ -48,11 +48,11 @@ class FLM:
     
     
     
-    def pup_gen(self, capacity_per_pup):
+    def fac_gen(self, capacity_per_fac):
         # Create Pickup-Point Dataframe
         set_of_all_pup = self.sample_nodes_df.copy()
-        cap_list = [capacity_per_pup] * self.customers_n
-        set_of_all_pup["Capacity_pup"] = cap_list
+        cap_list = [capacity_per_fac] * self.customers_n
+        set_of_all_pup["Capacity_fac"] = cap_list
         self.J = set_of_all_pup.index.values
         self.set_of_all_pup = set_of_all_pup
         return self.set_of_all_pup
@@ -71,7 +71,7 @@ class FLM:
     
         
         
-    def solver(self, PuP_N, Gap):
+    def solver(self, Fac_N, Gap):
 
         self.model = Model()
         
@@ -88,7 +88,7 @@ class FLM:
         self.model.setObjective(quicksum(self.dist_matrix3.loc[i,j] * self.y[i,j] for i in self.I for j in self.J), GRB.MINIMIZE)
         self.model.update()
         # How many Pickup Points do we want
-        P = PuP_N
+        P = Fac_N
         self.P = P
         
         # Constraints
@@ -97,7 +97,7 @@ class FLM:
             
         self.model.addConstr(quicksum(self.x[j] for j in self.J) == self.P)
         
-        self.model.addConstrs(quicksum(self.set_of_all_customers.loc[i].Demand_C * self.y[i,j] for i in self.I) <= self.set_of_all_pup.loc[j].Capacity_pup * self.x[j] for j in self.J)
+        self.model.addConstrs(quicksum(self.set_of_all_customers.loc[i].Demand_C * self.y[i,j] for i in self.I) <= self.set_of_all_pup.loc[j].Capacity_fac * self.x[j] for j in self.J)
         self.model.update()
 
         self.model.addConstrs(self.y[i,j] <= self.x[j] for j in self.J for i in self.I)
@@ -109,10 +109,10 @@ class FLM:
         
         
         
-    # Pickup Point Printer
-    def PuP_Print(self):
+    # Facility Printer
+    def Fac_Print(self):
 
-        print("The following Pickup-Points are established:")
+        print("The following Facilities are established:")
         for j in self.J:
             if self.x[j].X >= 0.1:
                 print("-{}; Coordinates: {}, {}".format(self.set_of_all_pup.loc[j].name,
@@ -122,7 +122,7 @@ class FLM:
                 
                 
     # Create Allocation Dataframe which is the basis for most of the Exploratory Analysis            
-    def PuP_Alloc(self):
+    def Fac_Alloc(self):
         pup_alloc = []
         for i in self.I:
             for j in self.J:
@@ -168,7 +168,7 @@ class FLM:
         # Create DF with the lists                
         Alloc_DF = pd.DataFrame(list(zip(pup_alloc,pup_lat, 
                                          pup_lon, customer_alloc, customer_lat, customer_lon)),
-                       columns =['PuP_ID',"PuP_lat", "PuP_lon", 'C_ID', "C_LAT", "C_LON"])
+                       columns =['Fac_ID',"Fac_lat", "Fac_lon", 'C_ID', "C_LAT", "C_LON"])
 
         # Shortest Path Function from osmnx/nx
         # G = ox.graph_from_place(self.place, network_type = "drive")
@@ -177,41 +177,41 @@ class FLM:
         self.Fs = ox.add_edge_speeds(self.Fs)
         self.Fs = ox.add_edge_travel_times(self.Fs)
 
-        def shortest_path(PuP_ID, C_ID):
-            length = nx.shortest_path_length(self.Fs, source=PuP_ID, target=C_ID, weight= "length")                                 
+        def shortest_path(Fac_ID, C_ID):
+            length = nx.shortest_path_length(self.Fs, source=Fac_ID, target=C_ID, weight= "length")                                 
             return length
 
         # Create new Distance column with the OSMNX Distances
-        Alloc_DF["Distance"] = Alloc_DF.apply(lambda x: shortest_path(x["PuP_ID"],x["C_ID"]), axis=1).round(1)
+        Alloc_DF["Distance"] = Alloc_DF.apply(lambda x: shortest_path(x["Fac_ID"],x["C_ID"]), axis=1).round(1)
 
         # Shortest Path Time Function
         
-        def shortest_path_time(PuP_ID, C_ID):
-            time = nx.shortest_path_length(self.Fs, source=PuP_ID, target=C_ID, weight= "travel_time")                                 
+        def shortest_path_time(Fac_ID, C_ID):
+            time = nx.shortest_path_length(self.Fs, source=Fac_ID, target=C_ID, weight= "travel_time")                                 
             return time
 
         # Add New Time Column
-        Alloc_DF["Travel_Time"] = Alloc_DF.apply(lambda x: shortest_path_time(x["PuP_ID"], x["C_ID"]),axis=1)
+        Alloc_DF["Travel_Time"] = Alloc_DF.apply(lambda x: shortest_path_time(x["Fac_ID"], x["C_ID"]),axis=1)
 
-        Alloc_DF = Alloc_DF.sort_values("PuP_ID")
+        Alloc_DF = Alloc_DF.sort_values("Fac_ID")
         self.Alloc_DF = Alloc_DF
         
-        # Add Column that has Walking Time from Customer to PuP, assuming a walking speed of 5km/h
+        # Add Column that has Walking Time from Customer to Fac, assuming a walking speed of 5km/h
         Alloc_DF["Walking_Time"] = (Alloc_DF["Distance"]/1.38888).round(1)
         
         
         # needed later for plotting/df creation
-        Location_DF = Alloc_DF.groupby("PuP_ID")["PuP_lat", "PuP_lon"].max()
+        Location_DF = Alloc_DF.groupby("Fac_ID")["Fac_lat", "Fac_lon"].max()
         self.PuP_Index = Location_DF.index.values
         
         return self.Alloc_DF
     
     
     
-    # Function that counts how many Customers are allocated to each PuP
+    # Function that counts how many Customers are allocated to each Fac
     def Alloc_Count(self):
         
-        Alloc_Count = self.Alloc_DF["PuP_ID"].value_counts().rename_axis("PuP_ID").to_frame("Customer_Count")
+        Alloc_Count = self.Alloc_DF["Fac_ID"].value_counts().rename_axis("Fac_ID").to_frame("Customer_Count")
         return Alloc_Count
     
     
@@ -219,13 +219,13 @@ class FLM:
     # Print out basic allocation stats regarding distance/time
     def Alloc_Stats(self):
         Alloc_Stats = pd.DataFrame(index=self.PuP_Index)
-        Alloc_Stats = Alloc_Stats.rename_axis("PuP_ID")
-        Alloc_Stats["Max_Distance"] = self.Alloc_DF.groupby("PuP_ID")["Distance"].max()
-        Alloc_Stats["Mean_Distance"] = self.Alloc_DF.groupby("PuP_ID")["Distance"].mean()
-        Alloc_Stats["Median_Distance"] = self.Alloc_DF.groupby("PuP_ID")["Distance"].median()
-        Alloc_Stats["Max_Time"] = self.Alloc_DF.groupby("PuP_ID")["Travel_Time"].max()
-        Alloc_Stats["Mean_Time"] = self.Alloc_DF.groupby("PuP_ID")["Travel_Time"].mean()
-        Alloc_Stats["Median_Time"] = self.Alloc_DF.groupby("PuP_ID")["Travel_Time"].median()
+        Alloc_Stats = Alloc_Stats.rename_axis("Fac_ID")
+        Alloc_Stats["Max_Distance"] = self.Alloc_DF.groupby("Fac_ID")["Distance"].max()
+        Alloc_Stats["Mean_Distance"] = self.Alloc_DF.groupby("Fac_ID")["Distance"].mean()
+        Alloc_Stats["Median_Distance"] = self.Alloc_DF.groupby("Fac_ID")["Distance"].median()
+        Alloc_Stats["Max_Time"] = self.Alloc_DF.groupby("Fac_ID")["Travel_Time"].max()
+        Alloc_Stats["Mean_Time"] = self.Alloc_DF.groupby("Fac_ID")["Travel_Time"].mean()
+        Alloc_Stats["Median_Time"] = self.Alloc_DF.groupby("Fac_ID")["Travel_Time"].median()
         Alloc_Stats = Alloc_Stats.round(1)
         self.Alloc_Stats = Alloc_Stats
         return self.Alloc_Stats
@@ -234,7 +234,7 @@ class FLM:
     
     
     def Alloc_Within(self, Dist1, Dist2, Time1, Time2, Walk_Time1, Walk_Time2):
-    # Create Columns which indicate whether allocated Customers are within certain distance/time of assigned PuP
+    # Create Columns which indicate whether allocated Customers are within certain distance/time of assigned Fac
         Alloc_DF_Copy = self.Alloc_DF.copy()
         Alloc_DF_Copy["Within_Dist1"] = np.where(Alloc_DF_Copy["Distance"] <= Dist1, 1, 0)
         Alloc_DF_Copy["Within_Dist2"] = np.where(Alloc_DF_Copy["Distance"] <= Dist2, 1, 0)
@@ -242,19 +242,19 @@ class FLM:
         Alloc_DF_Copy["Within_Time2"] = np.where(Alloc_DF_Copy["Travel_Time"] <= Time2, 1, 0)
         Alloc_DF_Copy["Within_Walk_Time1"] = np.where(Alloc_DF_Copy["Walking_Time"] <= Walk_Time1, 1, 0)
         Alloc_DF_Copy["Within_Walk_Time2"] = np.where(Alloc_DF_Copy["Walking_Time"] <= Walk_Time2, 1, 0)
-        Alloc_DF_Copy = Alloc_DF_Copy.sort_values("PuP_ID")
+        Alloc_DF_Copy = Alloc_DF_Copy.sort_values("Fac_ID")
         
-# Create Dataframe which shows percentage of customers within certain distance/time of their assigned PuP
-# Group by the PuP id, Sum the helper column "Within" for each specific PuP _ID and divide by Total Customers allocated
-# to the PuP to get the percentage of customers within a certain distance/time
+# Create Dataframe which shows percentage of customers within certain distance/time of their assigned Fac
+# Group by the Fac id, Sum the helper column "Within" for each specific Fac _ID and divide by Total Customers allocated
+# to the Fac to get the percentage of customers within a certain distance/time
         Check_DF = pd.DataFrame(index=self.PuP_Index)
-        Check_DF = Check_DF.rename_axis("PuP_ID")
-        Check_DF["Within_Time1"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Time1"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
-        Check_DF["Within_Time2"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Time2"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
-        Check_DF["Within_Dist1"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Dist1"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
-        Check_DF["Within_Dist2"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Dist2"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
-        Check_DF["Within_Walk_Time1"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Walk_Time1"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
-        Check_DF["Within_Walk_Time2"] = Alloc_DF_Copy.groupby("PuP_ID")["Within_Walk_Time2"].sum()/Alloc_DF_Copy["PuP_ID"].value_counts()*100
+        Check_DF = Check_DF.rename_axis("Fac_ID")
+        Check_DF["Within_Time1"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Time1"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
+        Check_DF["Within_Time2"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Time2"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
+        Check_DF["Within_Dist1"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Dist1"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
+        Check_DF["Within_Dist2"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Dist2"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
+        Check_DF["Within_Walk_Time1"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Walk_Time1"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
+        Check_DF["Within_Walk_Time2"] = Alloc_DF_Copy.groupby("Fac_ID")["Within_Walk_Time2"].sum()/Alloc_DF_Copy["Fac_ID"].value_counts()*100
         Check_DF = Check_DF.round(1)
         self.Check_DF = Check_DF
         return self.Check_DF
@@ -262,7 +262,7 @@ class FLM:
     
     
     
-    # Basic Plot -> shows where opened PuPs / customers are
+    # Basic Plot -> shows where opened Facs / customers are
     def Basic_Alloc_Plot(self):
         
         #place = {"city": city, "country": "Germany"}
@@ -274,7 +274,7 @@ class FLM:
         ns = []
         for node in self.Gs.nodes():
             if node in self.PuP_Index:
-                ns.append(500)
+                ns.append(900)
             elif node in self.Nodes_S:
                 ns.append(40)
             else:
@@ -289,14 +289,15 @@ class FLM:
 
         fig, ax = ox.plot_graph(self.Gs, node_size = ns, edge_linewidth = 0.5, node_color = nc, 
                                 figsize = (22,22), bgcolor = "black")
+        fig.savefig("result_graph/alb_test123.svg", format = "svg")
         
         
         
         
-    # Color Coded Plot. Color every PuP and allocated Customers differently     
+    # Color Coded Plot. Color every Fac and allocated Customers differently     
     def Colored_Plot(self):
         
-            alloc_list = self.Alloc_DF.groupby("PuP_ID")["C_ID"].apply(list)
+            alloc_list = self.Alloc_DF.groupby("Fac_ID")["C_ID"].apply(list)
             flat_list = [item for sublist in alloc_list for item in sublist]
 
             
@@ -308,7 +309,7 @@ class FLM:
             ns = []
             for node in self.Gs.nodes():
                 if node in self.PuP_Index:
-                    ns.append(500)
+                    ns.append(900)
                 elif node in self.Nodes_S:
                     ns.append(40)
                 else:
@@ -324,7 +325,7 @@ class FLM:
                 elif P == 1 and node not in flat_list:
                     nc.append("white")
 
-            # 2 PuPs        
+            # 2 Facs        
             for node in self.Gs.nodes():
                 if P == 2 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -333,7 +334,7 @@ class FLM:
                 elif P == 2 and node not in flat_list:
                     nc.append("white")
 
-            # 3 PuPs        
+            # 3 Facs        
             for node in self.Gs.nodes():
                 if P == 3 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -344,7 +345,7 @@ class FLM:
                 elif P == 3 and node not in flat_list:
                     nc.append("white")
 
-            # 4 PuPs
+            # 4 Facs
 
             for node in self.Gs.nodes():
                 if P == 4 and node in alloc_list.iloc[P-1]:
@@ -358,7 +359,7 @@ class FLM:
                 elif P == 4 and node not in flat_list:
                     nc.append("white")
 
-            # 5 PuPs
+            # 5 Facs
 
             for node in self.Gs.nodes():
                 if P == 5 and node in alloc_list.iloc[P-1]:
@@ -374,7 +375,7 @@ class FLM:
                 elif P == 5 and node not in flat_list:
                     nc.append("white")
 
-            # 6 PuPs
+            # 6 Facs
             for node in self.Gs.nodes():
                 if P == 6 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -391,7 +392,7 @@ class FLM:
                 elif P == 6 and node not in flat_list:
                     nc.append("white")
 
-            # 7 PuPs
+            # 7 Facs
             for node in self.Gs.nodes():
                 if P == 7 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -410,7 +411,7 @@ class FLM:
                 elif P == 7 and node not in flat_list:
                     nc.append("white")
 
-            # 8 PuPs
+            # 8 Facs
             for node in self.Gs.nodes():
                 if P == 8 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -431,7 +432,7 @@ class FLM:
                 elif P == 8 and node not in flat_list:
                     nc.append("white")
 
-            # 9 PuPs
+            # 9 Facs
             for node in self.Gs.nodes():
                 if P == 9 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -454,7 +455,7 @@ class FLM:
                 elif P == 9 and node not in flat_list:
                     nc.append("white")
 
-            # 10 PuPs
+            # 10 Facs
             for node in self.Gs.nodes():
                 if P == 10 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -479,7 +480,7 @@ class FLM:
                 elif P == 10 and node not in flat_list:
                     nc.append("white")
 
-            # 11 PuPs
+            # 11 Facs
             for node in self.Gs.nodes():
                 if P == 11 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -506,7 +507,7 @@ class FLM:
                 elif P == 11 and node not in flat_list:
                     nc.append("white")
 
-            # 12 PuPs
+            # 12 Facs
             for node in self.Gs.nodes():
                 if P == 12 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -535,7 +536,7 @@ class FLM:
                 elif P == 12 and node not in flat_list:
                     nc.append("white")
 
-            # 13 PuPs
+            # 13 Facs
             for node in self.Gs.nodes():
                 if P == 13 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -566,7 +567,7 @@ class FLM:
                 elif P == 13 and node not in flat_list:
                     nc.append("white")
 
-            # 14 PuPs
+            # 14 Facs
             for node in self.Gs.nodes():
                 if P == 14 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -599,7 +600,7 @@ class FLM:
                 elif P == 14 and node not in flat_list:
                     nc.append("white")
 
-            # 15 PuPs
+            # 15 Facs
             for node in self.Gs.nodes():
                 if P == 15 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -634,7 +635,7 @@ class FLM:
                 elif P == 15 and node not in flat_list:
                     nc.append("white")
 
-            # 16 PuPs
+            # 16 Facs
             for node in self.Gs.nodes():
                 if P == 16 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -671,7 +672,7 @@ class FLM:
                 elif P == 16 and node not in flat_list:
                     nc.append("white")
 
-            # 17 PuPs
+            # 17 Facs
             for node in self.Gs.nodes():
                 if P == 17 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -710,7 +711,7 @@ class FLM:
                 elif P == 17 and node not in flat_list:
                     nc.append("white")
 
-            # 18 PuPs
+            # 18 Facs
             for node in self.Gs.nodes():
                 if P == 18 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -751,7 +752,7 @@ class FLM:
                 elif P == 18 and node not in flat_list:
                     nc.append("white")
 
-            # 19 PuPs
+            # 19 Facs
             for node in self.Gs.nodes():
                 if P == 19 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -794,7 +795,7 @@ class FLM:
                 elif P == 19 and node not in flat_list:
                     nc.append("white")
 
-            # 20 PuPs
+            # 20 Facs
             for node in self.Gs.nodes():
                 if P == 20 and node in alloc_list.iloc[P-1]:
                     nc.append("orange")
@@ -841,9 +842,4 @@ class FLM:
 
             fig, ax = ox.plot_graph(self.Gs, node_size = ns, edge_linewidth = 0.5,
                                     node_color = nc, figsize = (22,22), bgcolor = "black")
-
-
-    
-    
-
-        
+            fig.savefig("result_graph/alb_color_test123.svg", format = "svg")
